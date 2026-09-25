@@ -23,8 +23,8 @@ export const AdminQuizEditorPage: React.FC = () => {
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [subjectId, setSubjectId] = useState('');
-  const [topicId, setTopicId] = useState('');
+  const [subjectName, setSubjectName] = useState('');
+  const [topicName, setTopicName] = useState('');
   const [durationMinutes, setDurationMinutes] = useState(30);
 
   const [questions, setQuestions] = useState<QuestionFormItem[]>([
@@ -47,13 +47,20 @@ export const AdminQuizEditorPage: React.FC = () => {
     api.get('/meta/subjects').then((res) => setSubjects(res.data.data));
   }, []);
 
+  const selectedSubject = subjects.find((subject) =>
+    [subject.nameEn, subject.nameSi, subject.code].some(
+      (name) => name.toLowerCase() === subjectName.trim().toLowerCase()
+    )
+  );
+
   useEffect(() => {
-    if (subjectId) {
-      api.get(`/meta/topics?subjectId=${subjectId}`).then((res) => setTopics(res.data.data));
+    if (selectedSubject?._id) {
+      api.get(`/meta/topics?subjectId=${selectedSubject._id}`).then((res) => setTopics(res.data.data));
     } else {
       setTopics([]);
+      setTopicName('');
     }
-  }, [subjectId]);
+  }, [selectedSubject?._id]);
 
   const handleInsertSymbol = (symbol: string) => {
     if (!focusedInput) return;
@@ -93,10 +100,22 @@ export const AdminQuizEditorPage: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const subjectId = selectedSubject?._id;
     if (!subjectId) {
-      alert('Please select a subject.');
+      alert('Please enter a valid subject name.');
       return;
     }
+
+    const selectedTopic = topics.find((topic) =>
+      [topic.nameEn, topic.nameSi].some(
+        (name) => name.toLowerCase() === topicName.trim().toLowerCase()
+      )
+    );
+    if (topicName.trim() && !selectedTopic) {
+      alert('Please enter a valid topic name for the selected subject.');
+      return;
+    }
+    const topicId = selectedTopic?._id || '';
 
     setSubmitting(true);
     try {
@@ -181,21 +200,14 @@ export const AdminQuizEditorPage: React.FC = () => {
               <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1.5">
                 Subject *
               </label>
-              <select
+              <input
+                type="text"
                 required
-                value={subjectId}
-                onChange={(e) => setSubjectId(e.target.value)}
-                className="w-full px-4 py-2.5 bg-slate-950/60 border border-slate-800 rounded-xl text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="" className="bg-slate-900 text-slate-400">
-                  Select Curriculum Subject
-                </option>
-                {subjects.map((s) => (
-                  <option key={s._id} value={s._id} className="bg-slate-900 text-white">
-                    {s.nameEn} ({s.nameSi})
-                  </option>
-                ))}
-              </select>
+                value={subjectName}
+                onChange={(e) => setSubjectName(e.target.value)}
+                placeholder="e.g. Science or විද්‍යාව"
+                className="w-full px-4 py-2.5 bg-slate-950/60 border border-slate-800 rounded-xl text-slate-100 placeholder-slate-500 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-sinhala"
+              />
             </div>
           </div>
 
@@ -204,21 +216,13 @@ export const AdminQuizEditorPage: React.FC = () => {
               <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1.5">
                 Topic / Unit (Optional)
               </label>
-              <select
-                value={topicId}
-                disabled={!subjectId || topics.length === 0}
-                onChange={(e) => setTopicId(e.target.value)}
-                className="w-full px-4 py-2.5 bg-slate-950/60 border border-slate-800 rounded-xl text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
-              >
-                <option value="" className="bg-slate-900 text-slate-400">
-                  All Topics / General
-                </option>
-                {topics.map((t) => (
-                  <option key={t._id} value={t._id} className="bg-slate-900 text-white font-sinhala">
-                    {t.nameEn} - {t.nameSi}
-                  </option>
-                ))}
-              </select>
+              <input
+                type="text"
+                value={topicName}
+                onChange={(e) => setTopicName(e.target.value)}
+                placeholder="e.g. Biology or ජීව විද්‍යාව"
+                className="w-full px-4 py-2.5 bg-slate-950/60 border border-slate-800 rounded-xl text-slate-100 placeholder-slate-500 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-sinhala"
+              />
             </div>
 
             <div>
