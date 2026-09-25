@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { api } from '../../services/api.js';
 import { Subject, Topic } from '../../types/index.js';
 import { UnicodeSymbolToolbar } from '../../components/UnicodeSymbolToolbar.js';
-import { Plus, Trash2, Save, ArrowLeft, HelpCircle } from 'lucide-react';
+import { Plus, Trash2, Save, ArrowLeft, HelpCircle, Calendar, Clock, CheckCircle } from 'lucide-react';
+import { toSriLankanInputString, fromSriLankanInputString, formatSriLankanTimePeriod } from '../../utils/sriLankanTime.js';
 
 interface QuestionFormItem {
   questionText: string;
@@ -11,7 +12,8 @@ interface QuestionFormItem {
   optionB: string;
   optionC: string;
   optionD: string;
-  correctAnswer: 'A' | 'B' | 'C' | 'D';
+  optionE?: string;
+  correctAnswer: 'A' | 'B' | 'C' | 'D' | 'E';
   marks: number;
   explanation: string;
 }
@@ -26,6 +28,15 @@ export const AdminQuizEditorPage: React.FC = () => {
   const [subjectName, setSubjectName] = useState('');
   const [topicName, setTopicName] = useState('');
   const [durationMinutes, setDurationMinutes] = useState(30);
+  const [publishMode, setPublishMode] = useState<'LIVE' | 'SCHEDULED'>('LIVE');
+  const [scheduledStartTime, setScheduledStartTime] = useState<string>(() => {
+    const d = new Date(Date.now() + 30 * 60 * 1000);
+    return toSriLankanInputString(d);
+  });
+  const [scheduledEndTime, setScheduledEndTime] = useState<string>(() => {
+    const d = new Date(Date.now() + 90 * 60 * 1000);
+    return toSriLankanInputString(d);
+  });
 
   const [questions, setQuestions] = useState<QuestionFormItem[]>([
     {
@@ -34,6 +45,7 @@ export const AdminQuizEditorPage: React.FC = () => {
       optionB: '',
       optionC: '',
       optionD: '',
+      optionE: '',
       correctAnswer: 'A',
       marks: 1,
       explanation: '',
@@ -119,35 +131,44 @@ export const AdminQuizEditorPage: React.FC = () => {
 
     setSubmitting(true);
     try {
-      const formattedQuestions = questions.map((q) => ({
-        questionText: q.questionText,
-        options: [
+      const formattedQuestions = questions.map((q) => {
+        const options = [
           { key: 'A', text: q.optionA },
           { key: 'B', text: q.optionB },
           { key: 'C', text: q.optionC },
           { key: 'D', text: q.optionD },
-        ],
-        correctAnswer: q.correctAnswer,
-        marks: Number(q.marks),
-        explanation: q.explanation,
-        topicId: topicId || undefined,
-      }));
+        ];
+        if (q.optionE && q.optionE.trim()) {
+          options.push({ key: 'E', text: q.optionE.trim() });
+        }
+        return {
+          questionText: q.questionText,
+          options,
+          correctAnswer: q.correctAnswer,
+          marks: Number(q.marks),
+          explanation: q.explanation,
+          topicId: topicId || undefined,
+        };
+      });
 
-      const now = new Date();
       await api.post('/admin/quizzes', {
         title,
         description,
         subjectId,
         topicIds: topicId ? [topicId] : [],
         questions: formattedQuestions,
-        date: now.toISOString(),
-        startTime: now.toISOString(),
-        endTime: new Date(now.getTime() + 7 * 86400000).toISOString(),
         durationMinutes: Number(durationMinutes),
-        instructions: 'Select the most accurate answer for each question.',
+        instructions: description || 'Select the most accurate answer for each question.',
+        publishMode,
+        scheduledStartTime: fromSriLankanInputString(scheduledStartTime).toISOString(),
+        scheduledEndTime: fromSriLankanInputString(scheduledEndTime).toISOString(),
       });
 
-      alert('Quiz created and published successfully!');
+      if (publishMode === 'SCHEDULED') {
+        alert('Quiz created and scheduled successfully in Sri Lankan Time!');
+      } else {
+        alert('Quiz created and published live successfully!');
+      }
       navigate('/admin/quizzes');
     } catch (err: any) {
       alert(err.response?.data?.message || 'Failed to create quiz.');
@@ -253,6 +274,197 @@ export const AdminQuizEditorPage: React.FC = () => {
               className="w-full px-4 py-2.5 bg-slate-950/60 border border-slate-800 rounded-xl text-slate-100 placeholder-slate-500 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-sinhala"
             />
           </div>
+
+          {/* Publishing Mode & Sri Lankan Time Period Scheduling */}
+          <div className="pt-3 border-t border-slate-800/80 space-y-4">
+            <div>
+              <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider">
+                Publishing Mode & Time Period (ප්‍රකාශන ආකාරය සහ කාල සීමාව) *
+              </label>
+              <p className="text-[11px] text-slate-400 mt-0.5">
+                Set the exact examination time period (e.g. 11:00 PM - 12:00 AM). Every student must answer within this window.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setPublishMode('LIVE');
+                  const now = new Date();
+                  setScheduledStartTime(toSriLankanInputString(now));
+                  setScheduledEndTime(toSriLankanInputString(new Date(now.getTime() + durationMinutes * 60000)));
+                }}
+                className={`p-4 rounded-2xl border text-left transition-all flex items-start gap-3.5 ${
+                  publishMode === 'LIVE'
+                    ? 'bg-emerald-950/30 border-emerald-500/50 shadow-lg shadow-emerald-500/10 ring-1 ring-emerald-500'
+                    : 'bg-slate-950/60 border-slate-800 hover:border-slate-700'
+                }`}
+              >
+                <div className={`p-2.5 rounded-xl ${publishMode === 'LIVE' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-800 text-slate-400'}`}>
+                  <CheckCircle className="w-5 h-5" />
+                </div>
+                <div>
+                  <span className="block text-sm font-bold text-white">Publish Live Immediately</span>
+                  <span className="block text-xs text-emerald-400 font-sinhala mt-0.5">දැන්ම සජීවීව පල කරන්න</span>
+                  <p className="text-[11px] text-slate-400 mt-1">Quiz activates immediately for the set duration.</p>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setPublishMode('SCHEDULED');
+                  const futureStart = new Date(Date.now() + 30 * 60000);
+                  setScheduledStartTime(toSriLankanInputString(futureStart));
+                  setScheduledEndTime(toSriLankanInputString(new Date(futureStart.getTime() + durationMinutes * 60000)));
+                }}
+                className={`p-4 rounded-2xl border text-left transition-all flex items-start gap-3.5 ${
+                  publishMode === 'SCHEDULED'
+                    ? 'bg-blue-950/30 border-blue-500/50 shadow-lg shadow-blue-500/10 ring-1 ring-blue-500'
+                    : 'bg-slate-950/60 border-slate-800 hover:border-slate-700'
+                }`}
+              >
+                <div className={`p-2.5 rounded-xl ${publishMode === 'SCHEDULED' ? 'bg-blue-500/20 text-blue-400' : 'bg-slate-800 text-slate-400'}`}>
+                  <Calendar className="w-5 h-5" />
+                </div>
+                <div>
+                  <span className="block text-sm font-bold text-white">Schedule Quiz Period (SLST)</span>
+                  <span className="block text-xs text-blue-400 font-sinhala mt-0.5">නියමිත වේලාවකට උපලේඛනගත කරන්න</span>
+                  <p className="text-[11px] text-slate-400 mt-1">Unlocks at scheduled start time and closes at end time.</p>
+                </div>
+              </button>
+            </div>
+
+            {/* Time Window Settings Card */}
+            <div className="p-4 sm:p-5 bg-slate-950/80 rounded-2xl border border-blue-500/30 space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800/80 pb-3">
+                <div className="flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-blue-400" />
+                  <span className="text-xs font-bold text-white">
+                    Sri Lanka Standard Time (SLST / Asia/Colombo · UTC+05:30)
+                  </span>
+                </div>
+                <span className="text-[10px] font-extrabold uppercase tracking-wider text-blue-300 bg-blue-500/10 border border-blue-500/30 px-2.5 py-0.5 rounded-lg self-start sm:self-auto">
+                  Live Window Active
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1.5">
+                    Start Date & Time (ආරම්භක වේලාව) *
+                  </label>
+                  <input
+                    type="datetime-local"
+                    required
+                    value={scheduledStartTime}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setScheduledStartTime(val);
+                      const start = fromSriLankanInputString(val);
+                      const end = new Date(start.getTime() + durationMinutes * 60000);
+                      setScheduledEndTime(toSriLankanInputString(end));
+                    }}
+                    className="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-white text-xs font-medium focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1.5">
+                    End Date & Time (අවසන් වන වේලාව) *
+                  </label>
+                  <input
+                    type="datetime-local"
+                    required
+                    value={scheduledEndTime}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setScheduledEndTime(val);
+                      const start = fromSriLankanInputString(scheduledStartTime);
+                      const end = fromSriLankanInputString(val);
+                      const diffMins = Math.max(1, Math.round((end.getTime() - start.getTime()) / 60000));
+                      setDurationMinutes(diffMins);
+                    }}
+                    className="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-white text-xs font-medium focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1.5">
+                    Duration (කාලය මිනිත්තු වලින්) *
+                  </label>
+                  <div className="flex gap-1.5 items-center">
+                    <input
+                      type="number"
+                      min="1"
+                      max="1440"
+                      required
+                      value={durationMinutes}
+                      onChange={(e) => {
+                        const val = Math.max(1, Number(e.target.value));
+                        setDurationMinutes(val);
+                        const start = fromSriLankanInputString(scheduledStartTime);
+                        const end = new Date(start.getTime() + val * 60000);
+                        setScheduledEndTime(toSriLankanInputString(end));
+                      }}
+                      className="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-white text-xs font-medium focus:ring-2 focus:ring-blue-500"
+                    />
+                    <span className="text-xs text-slate-400 font-semibold">mins</span>
+                  </div>
+
+                  {/* Quick Preset Buttons */}
+                  <div className="flex items-center gap-1 mt-1.5">
+                    {[15, 30, 45, 60, 90, 120].map((m) => (
+                      <button
+                        key={m}
+                        type="button"
+                        onClick={() => {
+                          setDurationMinutes(m);
+                          const start = fromSriLankanInputString(scheduledStartTime);
+                          const end = new Date(start.getTime() + m * 60000);
+                          setScheduledEndTime(toSriLankanInputString(end));
+                        }}
+                        className={`text-[10px] font-bold px-1.5 py-0.5 rounded border transition-colors ${
+                          durationMinutes === m
+                            ? 'bg-blue-600 text-white border-blue-500'
+                            : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-white'
+                        }`}
+                      >
+                        {m}m
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Time Period Live Preview Card */}
+              <div className="p-3.5 bg-blue-500/10 border border-blue-500/30 rounded-xl space-y-1.5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
+                  <div className="flex items-center gap-2">
+                    <Clock className="w-4 h-4 text-blue-400 flex-shrink-0" />
+                    <div>
+                      <span className="text-[11px] font-bold text-blue-300 block">
+                        විභාග කාල සීමාව (Official Examination Period):
+                      </span>
+                      <strong className="text-xs sm:text-sm text-white font-mono block">
+                        {formatSriLankanTimePeriod(
+                          fromSriLankanInputString(scheduledStartTime),
+                          fromSriLankanInputString(scheduledEndTime)
+                        )}
+                      </strong>
+                    </div>
+                  </div>
+                  <span className="px-2.5 py-1 rounded-lg bg-blue-600/30 border border-blue-500/40 text-blue-200 text-xs font-bold font-mono self-start sm:self-auto">
+                    {durationMinutes} Minutes Window
+                  </span>
+                </div>
+                <p className="text-[11px] text-amber-300 font-sinhala leading-relaxed">
+                  ⚠️ සෑම සිසුවෙකුම මෙම කාල සීමාව තුළ ප්‍රශ්නාවලියට පිළිතුරු සපයා භාර දිය යුතුය. නියමිත අවසන් වේලාව පැමිණි පසු විභාගය ස්වයංක්‍රීයව අවසන් වී නිල ශ්‍රේණිගත කිරීම් ගණනය කෙරේ.
+                </p>
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* Global Toolbar for quick symbols */}
@@ -317,7 +529,7 @@ export const AdminQuizEditorPage: React.FC = () => {
                 />
               </div>
 
-              {/* Options A, B, C, D */}
+              {/* Options A, B, C, D, E */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
                 {(['A', 'B', 'C', 'D'] as const).map((key) => {
                   const fieldName = `option${key}` as keyof QuestionFormItem;
@@ -345,6 +557,27 @@ export const AdminQuizEditorPage: React.FC = () => {
                     </div>
                   );
                 })}
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 mb-1">
+                    Option E (Optional / A/L 5-Choice Exam)
+                  </label>
+                  <input
+                    type="text"
+                    value={q.optionE || ''}
+                    onFocus={() => setFocusedInput({ qIdx: idx, field: 'optionE' })}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setQuestions((prev) => {
+                        const copy = [...prev];
+                        copy[idx].optionE = val;
+                        return copy;
+                      });
+                    }}
+                    placeholder="Option E text (optional for 5-choice papers)"
+                    className="w-full px-4 py-2.5 bg-slate-950/60 border border-slate-800 rounded-xl text-slate-100 placeholder-slate-500 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-sinhala"
+                  />
+                </div>
               </div>
 
               {/* Correct answer & marks */}
@@ -369,6 +602,7 @@ export const AdminQuizEditorPage: React.FC = () => {
                     <option value="B">Option B</option>
                     <option value="C">Option C</option>
                     <option value="D">Option D</option>
+                    <option value="E">Option E</option>
                   </select>
                 </div>
 

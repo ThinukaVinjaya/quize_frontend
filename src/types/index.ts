@@ -90,6 +90,17 @@ export interface Quiz {
   status: QuizStatus;
   isLateQuiz?: boolean;
   hasAttempted?: boolean;
+  hasActiveAttempt?: boolean;
+  resultId?: string | null;
+  myScore?: number;
+  myPercentage?: number;
+  myIslandRank?: number;
+  myProvinceRank?: number;
+  myDistrictRank?: number;
+  isQuizEnded?: boolean;
+  rankPublished?: boolean;
+  timeRemainingSeconds?: number;
+  serverTime?: string;
 }
 
 export interface QuizAttemptStart {
@@ -122,6 +133,12 @@ export interface QuizResult {
   provinceRank: number;
   districtRank: number;
   isLateAttempt: boolean;
+  isQuizEnded?: boolean;
+  rankPublished?: boolean;
+  timeRemainingSeconds?: number;
+  endTime?: string;
+  serverTime?: string;
+  scheduledSriLankanEndTime?: string;
   topicBreakdown: Array<{
     topicId: string;
     topicName: string;

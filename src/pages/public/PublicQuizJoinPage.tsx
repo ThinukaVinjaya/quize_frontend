@@ -15,8 +15,10 @@ import {
   AlertCircle,
   Sparkles,
   ArrowRight,
-  GraduationCap
+  GraduationCap,
+  Calendar
 } from 'lucide-react';
+import { formatSriLankanTime, formatSriLankanTimePeriod } from '../../utils/sriLankanTime.js';
 
 export const PublicQuizJoinPage: React.FC = () => {
   const { quizId } = useParams<{ quizId: string }>();
@@ -117,15 +119,35 @@ export const PublicQuizJoinPage: React.FC = () => {
             <span className="px-3 py-1 bg-blue-500/15 text-blue-400 border border-blue-500/30 text-xs font-bold rounded-xl">
               {quiz.subject?.nameEn || quiz.subject?.nameSi || 'Curriculum Subject'}
             </span>
-            <span className="px-2.5 py-1 bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 text-[11px] font-bold rounded-xl flex items-center gap-1">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping inline-block" />
-              Live Online
-            </span>
+            {quiz.status === 'SCHEDULED' ? (
+              <span className="px-2.5 py-1 bg-blue-500/15 text-blue-300 border border-blue-500/30 text-[11px] font-bold rounded-xl flex items-center gap-1">
+                <Clock className="w-3 h-3 text-blue-400" />
+                Scheduled Exam (SLST)
+              </span>
+            ) : (
+              <span className="px-2.5 py-1 bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 text-[11px] font-bold rounded-xl flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping inline-block" />
+                Live Online
+              </span>
+            )}
           </div>
 
           <h1 className="text-xl sm:text-2xl font-extrabold text-white font-sinhala leading-snug">
             <MathRenderer text={quiz.title} />
           </h1>
+
+          <div className="p-3.5 bg-blue-500/10 border border-blue-500/25 rounded-2xl text-xs space-y-1.5">
+            <div className="flex items-center gap-1.5 text-blue-300 font-bold">
+              <Calendar className="w-4 h-4 text-blue-400" />
+              <span>විභාග කාල සීමාව (Official Exam Period):</span>
+            </div>
+            <p className="text-white font-mono text-sm pl-5 font-bold">
+              {formatSriLankanTimePeriod(quiz.startTime, quiz.endTime)}
+            </p>
+            <p className="text-[11px] text-amber-300/90 pl-5 font-sinhala leading-relaxed">
+              ⚠️ සෑම සිසුවෙකුම මෙම කාල සීමාව තුළ ප්‍රශ්නාවලියට පිළිතුරු සපයා භාර දිය යුතුය. (Everyone must answer and submit strictly within this time window.)
+            </p>
+          </div>
 
           {quiz.description && (
             <p className="text-xs text-slate-400 leading-relaxed font-sinhala">
@@ -161,9 +183,21 @@ export const PublicQuizJoinPage: React.FC = () => {
           <div className="space-y-3">
             <Link
               to={examTakeUrl}
-              className="w-full py-4 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold rounded-2xl shadow-xl shadow-emerald-500/25 transition-all flex items-center justify-center gap-2 text-sm uppercase tracking-wider"
+              className={`w-full py-4 text-white font-extrabold rounded-2xl shadow-xl transition-all flex items-center justify-center gap-2 text-sm uppercase tracking-wider ${
+                quiz.status === 'SCHEDULED'
+                  ? 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 shadow-blue-500/25'
+                  : 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 shadow-emerald-500/25'
+              }`}
             >
-              Start Examination Now <ArrowRight className="w-4 h-4" />
+              {quiz.status === 'SCHEDULED' ? (
+                <>
+                  <Clock className="w-4 h-4" /> Check Scheduled Exam <ArrowRight className="w-4 h-4" />
+                </>
+              ) : (
+                <>
+                  Start Examination Now <ArrowRight className="w-4 h-4" />
+                </>
+              )}
             </Link>
           </div>
         ) : (

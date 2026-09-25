@@ -18,8 +18,12 @@ import {
   Info,
   Download,
   Layers,
-  Target
+  Target,
+  Clock,
+  Type,
+  Calendar
 } from 'lucide-react';
+import { toSriLankanInputString, fromSriLankanInputString } from '../../utils/sriLankanTime.js';
 
 export const AdminPdfImportPage: React.FC = () => {
   const navigate = useNavigate();
@@ -30,8 +34,31 @@ export const AdminPdfImportPage: React.FC = () => {
   const [pdfImport, setPdfImport] = useState<PdfImport | null>(null);
   const [editingQuestions, setEditingQuestions] = useState<ParsedQuestionItem[]>([]);
   const [quizTitle, setQuizTitle] = useState('');
+  const [durationMinutes, setDurationMinutes] = useState(30);
+  const [selectedFont, setSelectedFont] = useState<'noto-regular' | 'noto-bold' | 'arial'>('noto-regular');
   const [activeTab, setActiveTab] = useState<'multi-topic' | 'sinhala' | 'english' | 'math'>('multi-topic');
   const [copied, setCopied] = useState(false);
+  const [publishMode, setPublishMode] = useState<'LIVE' | 'SCHEDULED'>('LIVE');
+  const [scheduledStartTime, setScheduledStartTime] = useState<string>(() => {
+    const d = new Date(Date.now() + 30 * 60 * 1000);
+    return toSriLankanInputString(d);
+  });
+  const [scheduledEndTime, setScheduledEndTime] = useState<string>(() => {
+    const d = new Date(Date.now() + 90 * 60 * 1000);
+    return toSriLankanInputString(d);
+  });
+
+  const getFontClass = () => {
+    switch (selectedFont) {
+      case 'noto-bold':
+        return 'font-sinhala-bold font-bold';
+      case 'arial':
+        return 'font-sinhala-arial';
+      case 'noto-regular':
+      default:
+        return 'font-sinhala-regular font-normal';
+    }
+  };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -53,7 +80,10 @@ export const AdminPdfImportPage: React.FC = () => {
       });
       const data: PdfImport = res.data.data;
       setPdfImport(data);
-      setEditingQuestions(data.parsedQuestions || []);
+      const questionsList = data.parsedQuestions || [];
+      setEditingQuestions(questionsList);
+      const calculatedDuration = questionsList.length > 0 ? Math.max(15, Math.ceil(questionsList.length * 1.5)) : 30;
+      setDurationMinutes(calculatedDuration);
       setQuizTitle(
         `${data.subjectName || 'Science'} - ${data.topicName || 'Model Examination'}`
       );
@@ -76,7 +106,10 @@ export const AdminPdfImportPage: React.FC = () => {
       const res = await api.post('/admin/pdf/text', { text: rawText });
       const data: PdfImport = res.data.data;
       setPdfImport(data);
-      setEditingQuestions(data.parsedQuestions || []);
+      const questionsList = data.parsedQuestions || [];
+      setEditingQuestions(questionsList);
+      const calculatedDuration = questionsList.length > 0 ? Math.max(15, Math.ceil(questionsList.length * 1.5)) : 30;
+      setDurationMinutes(calculatedDuration);
       setQuizTitle(
         `${data.subjectName || 'විද්‍යාව'} - ${data.topicName || 'ආදර්ශ පරීක්ෂණය'}`
       );
@@ -110,6 +143,12 @@ export const AdminPdfImportPage: React.FC = () => {
 
   const handlePublishAsQuiz = async () => {
     if (!pdfImport) return;
+    const finalDuration = parseInt(String(durationMinutes), 10);
+    if (isNaN(finalDuration) || finalDuration <= 0) {
+      alert('කරුණාකර වලංගු විභාග කාල සීමාවක් මිනිත්තු වලින් ඇතුළත් කරන්න (Please enter a valid quiz duration in minutes).');
+      return;
+    }
+
     try {
       // First save edited questions
       await api.put(`/admin/pdf/${pdfImport._id}/questions`, {
@@ -118,13 +157,20 @@ export const AdminPdfImportPage: React.FC = () => {
         parsedQuestions: editingQuestions,
       });
 
-      // Convert to quiz
+      // Convert to quiz with user-adjusted duration & Sri Lankan scheduling options
       await api.post(`/admin/pdf/${pdfImport._id}/publish-quiz`, {
         title: quizTitle,
-        durationMinutes: 30,
+        durationMinutes: finalDuration,
+        publishMode,
+        scheduledStartTime: publishMode === 'SCHEDULED' ? fromSriLankanInputString(scheduledStartTime).toISOString() : undefined,
+        scheduledEndTime: publishMode === 'SCHEDULED' && scheduledEndTime ? fromSriLankanInputString(scheduledEndTime).toISOString() : undefined,
       });
 
-      alert('Questions imported and published successfully as a live quiz!');
+      if (publishMode === 'SCHEDULED') {
+        alert(`ප්‍රශ්නාවලිය සාර්ථකව ශ්‍රී ලංකා වේලාවෙන් උපලේඛනගත කරන ලදී! (Quiz scheduled successfully for ${scheduledStartTime.replace('T', ' ')} SLST)`);
+      } else {
+        alert(`ප්‍රශ්නාවලිය සාර්ථකව විනාඩි ${finalDuration} ක කාල සීමාවක් සහිතව සජීවීව පළ කරන ලදී! (Quiz published successfully as LIVE with ${finalDuration} min duration)`);
+      }
       navigate('/admin/quizzes');
     } catch (err: any) {
       alert(err.response?.data?.message || 'Failed to publish examination.');
@@ -490,20 +536,26 @@ CORRECT: B`
             </div>
 
             {/* Key Formatting Guidelines */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-2 text-[11px] text-slate-400">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-3 pt-2 text-[11px] text-slate-400">
               <div className="p-3 bg-slate-950/40 rounded-xl border border-slate-800/60 space-y-1">
                 <span className="font-bold text-slate-300 block flex items-center gap-1.5">
-                  <Layers className="w-3.5 h-3.5 text-blue-400" /> 1. Multiple Topics per Quiz
+                  <Type className="w-3.5 h-3.5 text-emerald-400" /> Supported Sinhala Fonts
                 </span>
-                <span>Place <code>TOPIC: Name</code> or <code>මාතෘකාව: නම</code> above any question block to start a new curriculum section.</span>
+                <span>Fully supports <strong>Noto Sans Sinhala (Regular & Bold)</strong>, <strong>Arial</strong>, Iskoola Pota, and FM-Abhaya with Unicode auto-recovery.</span>
               </div>
               <div className="p-3 bg-slate-950/40 rounded-xl border border-slate-800/60 space-y-1">
-                <span className="font-bold text-slate-300 block">2. Question & Four Options</span>
-                <span>Use <code>QUESTION 1:</code> or <code>ප්‍රශ්නය 1:</code> followed by <code>A:</code>, <code>B:</code>, <code>C:</code>, <code>D:</code> options.</span>
+                <span className="font-bold text-slate-300 block flex items-center gap-1.5">
+                  <Layers className="w-3.5 h-3.5 text-blue-400" /> 1. Multiple Topics
+                </span>
+                <span>Place <code>TOPIC: Name</code> or <code>මාතෘකාව: නම</code> above question block to group by curriculum.</span>
               </div>
               <div className="p-3 bg-slate-950/40 rounded-xl border border-slate-800/60 space-y-1">
-                <span className="font-bold text-slate-300 block">3. Correct Key & Explanation</span>
-                <span>Use <code>CORRECT: A</code> (or <code>නිවැරදි: A</code>) and optional <code>EXPLANATION: text</code>.</span>
+                <span className="font-bold text-slate-300 block">2. Questions & Options</span>
+                <span>Use <code>QUESTION 1:</code> or <code>ප්‍රශ්නය 1:</code> with <code>A:</code>, <code>B:</code>, <code>C:</code>, <code>D:</code> or <code>1-4</code>.</span>
+              </div>
+              <div className="p-3 bg-slate-950/40 rounded-xl border border-slate-800/60 space-y-1">
+                <span className="font-bold text-slate-300 block">3. Correct Answer Key</span>
+                <span>Use <code>CORRECT: A</code> (or <code>නිවැරදි: 1</code>) and optional <code>EXPLANATION: text</code>.</span>
               </div>
             </div>
           </div>
@@ -513,7 +565,7 @@ CORRECT: B`
       {/* Question Verification & Publishing View */}
       {pdfImport && (
         <div className="space-y-6">
-          <div className="bg-slate-900/70 backdrop-blur-xl rounded-3xl p-6 sm:p-8 border border-slate-800 shadow-xl space-y-4">
+          <div className="bg-slate-900/70 backdrop-blur-xl rounded-3xl p-6 sm:p-8 border border-slate-800 shadow-xl space-y-5">
             <div className="flex justify-between items-center border-b border-slate-800 pb-4">
               <div>
                 <span className="text-xs font-bold text-emerald-400 uppercase tracking-wider bg-emerald-500/10 px-2.5 py-1 rounded-md border border-emerald-500/20">
@@ -531,17 +583,108 @@ CORRECT: B`
               </button>
             </div>
 
-            <div>
-              <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1.5">
-                Quiz Title *
-              </label>
-              <input
-                type="text"
-                required
-                value={quizTitle}
-                onChange={(e) => setQuizTitle(e.target.value)}
-                className="w-full px-4 py-2.5 bg-slate-950/60 border border-slate-800 rounded-xl text-slate-100 text-sm font-semibold font-sinhala"
-              />
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+              <div className="lg:col-span-2">
+                <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1.5">
+                  Quiz Title *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={quizTitle}
+                  onChange={(e) => setQuizTitle(e.target.value)}
+                  className={`w-full px-4 py-2.5 bg-slate-950/60 border border-slate-800 rounded-xl text-slate-100 text-sm font-semibold ${getFontClass()}`}
+                />
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                    <Clock className="w-3.5 h-3.5 text-blue-400" />
+                    Quiz Time (Minutes) *
+                  </label>
+                  <span className="text-[11px] text-slate-400 font-medium">
+                    {editingQuestions.length > 0
+                      ? `~${(durationMinutes / editingQuestions.length).toFixed(1)}m / Q`
+                      : ''}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min="1"
+                    max="360"
+                    required
+                    value={durationMinutes}
+                    onChange={(e) => setDurationMinutes(Math.max(1, Number(e.target.value)))}
+                    className="w-20 px-3 py-2 bg-slate-950/60 border border-slate-800 rounded-xl text-slate-100 text-sm font-bold text-center focus:ring-2 focus:ring-blue-500"
+                  />
+                  <div className="flex items-center gap-1 flex-wrap">
+                    {[15, 30, 45, 60].map((mins) => (
+                      <button
+                        key={mins}
+                        type="button"
+                        onClick={() => setDurationMinutes(mins)}
+                        className={`px-2 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                          durationMinutes === mins
+                            ? 'bg-blue-600 text-white shadow-md'
+                            : 'bg-slate-800/80 text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        {mins}m
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Sinhala Font Preview Selector */}
+            <div className="pt-2 border-t border-slate-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <Type className="w-4 h-4 text-emerald-400" />
+                <span className="text-xs font-bold text-slate-300">
+                  Sinhala Font Display:
+                </span>
+                <span className="text-[11px] text-slate-400">
+                  (Toggle font to preview extracted text)
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => setSelectedFont('noto-regular')}
+                  className={`px-3 py-1 rounded-xl text-xs font-semibold transition-all ${
+                    selectedFont === 'noto-regular'
+                      ? 'bg-emerald-600 text-white shadow-md'
+                      : 'bg-slate-800/80 text-slate-400 hover:text-white'
+                  }`}
+                >
+                  Noto Sans Sinhala Regular
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedFont('noto-bold')}
+                  className={`px-3 py-1 rounded-xl text-xs font-bold transition-all ${
+                    selectedFont === 'noto-bold'
+                      ? 'bg-emerald-600 text-white shadow-md'
+                      : 'bg-slate-800/80 text-slate-400 hover:text-white'
+                  }`}
+                >
+                  Noto Sans Sinhala Bold
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedFont('arial')}
+                  className={`px-3 py-1 rounded-xl text-xs font-semibold transition-all ${
+                    selectedFont === 'arial'
+                      ? 'bg-emerald-600 text-white shadow-md'
+                      : 'bg-slate-800/80 text-slate-400 hover:text-white'
+                  }`}
+                >
+                  Arial (Sinhala)
+                </button>
+              </div>
             </div>
           </div>
 
@@ -619,7 +762,7 @@ CORRECT: B`
                     rows={2}
                     value={q.questionText}
                     onChange={(e) => handleQuestionChange(idx, 'questionText', e.target.value)}
-                    className="w-full px-4 py-2.5 bg-slate-950/60 border border-slate-800 rounded-xl text-slate-100 text-sm font-sinhala leading-relaxed"
+                    className={`w-full px-4 py-2.5 bg-slate-950/60 border border-slate-800 rounded-xl text-slate-100 text-sm leading-relaxed ${getFontClass()}`}
                   />
                 </div>
 
@@ -633,7 +776,7 @@ CORRECT: B`
                         type="text"
                         value={opt.text}
                         onChange={(e) => handleOptionChange(idx, opt.key, e.target.value)}
-                        className="w-full px-3 py-1.5 bg-slate-950/60 border border-slate-800 rounded-xl text-slate-200 text-xs font-sinhala"
+                        className={`w-full px-3 py-1.5 bg-slate-950/60 border border-slate-800 rounded-xl text-slate-200 text-xs ${getFontClass()}`}
                       />
                     </div>
                   ))}
@@ -649,10 +792,21 @@ CORRECT: B`
                       onChange={(e) => handleQuestionChange(idx, 'correctAnswer', e.target.value)}
                       className="w-full px-3 py-2 bg-slate-950/60 border border-slate-800 rounded-xl text-slate-100 text-xs font-bold"
                     >
-                      <option value="A">Option A</option>
-                      <option value="B">Option B</option>
-                      <option value="C">Option C</option>
-                      <option value="D">Option D</option>
+                      {q.options && q.options.length > 0 ? (
+                        q.options.map((opt) => (
+                          <option key={opt.key} value={opt.key}>
+                            Option {opt.key}
+                          </option>
+                        ))
+                      ) : (
+                        <>
+                          <option value="A">Option A</option>
+                          <option value="B">Option B</option>
+                          <option value="C">Option C</option>
+                          <option value="D">Option D</option>
+                          <option value="E">Option E</option>
+                        </>
+                      )}
                     </select>
                   </div>
                   <div>
@@ -672,14 +826,193 @@ CORRECT: B`
             ))}
           </div>
 
-          <div className="pt-4">
-            <button
-              onClick={handlePublishAsQuiz}
-              className="w-full py-4 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold rounded-2xl shadow-xl shadow-emerald-500/25 transition-all flex items-center justify-center gap-2 text-sm uppercase tracking-wider"
-            >
-              <Save className="w-5 h-5" />
-              Publish Examination as Live Quiz
-            </button>
+          {/* Pre-Publish Quiz Timing Adjustment & Summary Card */}
+          <div className="bg-gradient-to-br from-slate-900 via-slate-900 to-blue-950/40 rounded-3xl p-6 sm:p-8 border border-blue-500/20 shadow-2xl space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-2xl text-blue-400">
+                  <Clock className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-base sm:text-lg font-bold text-white font-display">
+                    Adjust Quiz Duration Before Publishing (විභාග කාලය සකස් කිරීම)
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    Set the authoritative time limit students will have to complete this examination.
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold text-slate-300 bg-slate-800/80 px-3 py-1.5 rounded-xl border border-slate-700">
+                  Total Questions: <strong className="text-emerald-400">{editingQuestions.length}</strong>
+                </span>
+                <span className="text-xs font-semibold text-slate-300 bg-slate-800/80 px-3 py-1.5 rounded-xl border border-slate-700">
+                  Total Marks: <strong className="text-amber-400">{editingQuestions.reduce((a, q) => a + (q.marks || 1), 0)}</strong>
+                </span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
+              <div>
+                <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-2">
+                  Examination Time Limit (Minutes / මිනිත්තු) *
+                </label>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="number"
+                    min="1"
+                    max="360"
+                    value={durationMinutes}
+                    onChange={(e) => setDurationMinutes(Math.max(1, Number(e.target.value)))}
+                    className="w-28 px-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-white font-black text-lg text-center focus:ring-2 focus:ring-blue-500"
+                  />
+                  <div className="flex flex-wrap gap-1.5">
+                    {[15, 20, 30, 45, 60, 90, 120].map((mins) => (
+                      <button
+                        key={mins}
+                        type="button"
+                        onClick={() => setDurationMinutes(mins)}
+                        className={`px-3 py-2 rounded-xl text-xs font-bold transition-all ${
+                          durationMinutes === mins
+                            ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/25 ring-2 ring-blue-400'
+                            : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
+                        }`}
+                      >
+                        {mins}m
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-4 bg-slate-950/60 rounded-2xl border border-slate-800/80 space-y-2 text-xs">
+                <div className="flex justify-between items-center text-slate-300">
+                  <span>⏱️ Allocated Quiz Time:</span>
+                  <span className="font-bold text-blue-400">{durationMinutes} Minutes</span>
+                </div>
+                <div className="flex justify-between items-center text-slate-300">
+                  <span>📝 Average Time Per Question:</span>
+                  <span className="font-bold text-emerald-400">
+                    {editingQuestions.length > 0
+                      ? `${(durationMinutes / editingQuestions.length).toFixed(1)} Minutes`
+                      : '0 Minutes'}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center text-slate-300">
+                  <span>🔤 Active Sinhala Font Preview:</span>
+                  <span className="font-bold text-amber-300">
+                    {selectedFont === 'noto-bold'
+                      ? 'Noto Sans Sinhala Bold'
+                      : selectedFont === 'arial'
+                      ? 'Arial (Sinhala)'
+                      : 'Noto Sans Sinhala Regular'}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Sri Lankan Time Quiz Scheduling & Timing Adjustment */}
+            <div className="space-y-4 pt-2 border-t border-slate-800/80">
+              <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider">
+                Publishing Mode & Schedule (ප්‍රකාශන ආකාරය සහ ශ්‍රී ලංකා වේලාව) *
+              </label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => setPublishMode('LIVE')}
+                  className={`p-4 rounded-2xl border text-left transition-all flex items-start gap-3.5 ${
+                    publishMode === 'LIVE'
+                      ? 'bg-emerald-950/30 border-emerald-500/50 shadow-lg shadow-emerald-500/10 ring-1 ring-emerald-500'
+                      : 'bg-slate-950/60 border-slate-800 hover:border-slate-700'
+                  }`}
+                >
+                  <div className={`p-2.5 rounded-xl ${publishMode === 'LIVE' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-800 text-slate-400'}`}>
+                    <CheckCircle className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <span className="block text-sm font-bold text-white">Publish Live Immediately</span>
+                    <span className="block text-xs text-emerald-400 font-sinhala mt-0.5">දැන්ම සජීවීව පල කරන්න</span>
+                    <p className="text-[11px] text-slate-400 mt-1">Quiz becomes active right away for students to attempt.</p>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setPublishMode('SCHEDULED')}
+                  className={`p-4 rounded-2xl border text-left transition-all flex items-start gap-3.5 ${
+                    publishMode === 'SCHEDULED'
+                      ? 'bg-blue-950/30 border-blue-500/50 shadow-lg shadow-blue-500/10 ring-1 ring-blue-500'
+                      : 'bg-slate-950/60 border-slate-800 hover:border-slate-700'
+                  }`}
+                >
+                  <div className={`p-2.5 rounded-xl ${publishMode === 'SCHEDULED' ? 'bg-blue-500/20 text-blue-400' : 'bg-slate-800 text-slate-400'}`}>
+                    <Calendar className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <span className="block text-sm font-bold text-white">Schedule Quiz (SLST)</span>
+                    <span className="block text-xs text-blue-400 font-sinhala mt-0.5">ශ්‍රී ලංකා වේලාවෙන් උපලේඛනගත කරන්න</span>
+                    <p className="text-[11px] text-slate-400 mt-1">Students see upcoming date/time; unlocks at scheduled time.</p>
+                  </div>
+                </button>
+              </div>
+
+              {publishMode === 'SCHEDULED' && (
+                <div className="p-4 bg-slate-950/80 rounded-2xl border border-blue-500/30 space-y-4 animate-in fade-in duration-300">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Clock className="w-4 h-4 text-blue-400" />
+                      <span className="text-xs font-bold text-white">
+                        Sri Lanka Standard Time (SLST / Asia/Colombo · UTC+05:30)
+                      </span>
+                    </div>
+                    <span className="text-[10px] font-extrabold uppercase tracking-wider text-blue-300 bg-blue-500/10 border border-blue-500/30 px-2.5 py-0.5 rounded-lg">
+                      Sri Lanka Timezone Active
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                        Scheduled Start Date & Time (ආරම්භක දිනය සහ වේලාව) *
+                      </label>
+                      <input
+                        type="datetime-local"
+                        value={scheduledStartTime}
+                        onChange={(e) => setScheduledStartTime(e.target.value)}
+                        className="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-white text-xs font-medium focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                        Scheduled End Date & Time (අවසන් වන දිනය සහ වේලාව - Optional)
+                      </label>
+                      <input
+                        type="datetime-local"
+                        value={scheduledEndTime}
+                        onChange={(e) => setScheduledEndTime(e.target.value)}
+                        className="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-white text-xs font-medium focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="pt-2">
+              <button
+                onClick={handlePublishAsQuiz}
+                className={`w-full py-4 text-white font-extrabold rounded-2xl shadow-xl transition-all flex items-center justify-center gap-2 text-sm uppercase tracking-wider ${
+                  publishMode === 'SCHEDULED'
+                    ? 'bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-600 hover:from-blue-500 hover:to-indigo-500 shadow-blue-500/25'
+                    : 'bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-600 hover:from-emerald-500 hover:to-teal-500 shadow-emerald-500/25'
+                }`}
+              >
+                <Save className="w-5 h-5" />
+                {publishMode === 'SCHEDULED'
+                  ? `Schedule Quiz for Sri Lankan Time (${durationMinutes} Mins · ${editingQuestions.length} Questions)`
+                  : `Publish Examination as Live Quiz (${durationMinutes} Mins · ${editingQuestions.length} Questions)`}
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -4,6 +4,7 @@ import { api } from '../../services/api.js';
 import { Quiz, Question, QuizAttemptStart } from '../../types/index.js';
 import { MathRenderer } from '../../components/MathRenderer.js';
 import { Clock, ChevronLeft, ChevronRight, AlertTriangle, Send, CheckCircle2, Bookmark } from 'lucide-react';
+import { formatSriLankanTimePeriod, formatSriLankanClockTime } from '../../utils/sriLankanTime.js';
 
 export const QuizExamPage: React.FC = () => {
   const { quizId } = useParams<{ quizId: string }>();
@@ -20,14 +21,23 @@ export const QuizExamPage: React.FC = () => {
   const [autoSubmittedModal, setAutoSubmittedModal] = useState(false);
   const [showSubmitModal, setShowSubmitModal] = useState(false);
 
+  const [initError, setInitError] = useState<string | null>(null);
+
   // Initialize quiz and attempt
   useEffect(() => {
+    if (!quizId) return;
+    let isCancelled = false;
+    setLoading(true);
+    setInitError(null);
+
     async function initExam() {
       try {
         const [quizRes, attemptRes] = await Promise.all([
           api.get(`/quizzes/${quizId}`),
           api.post(`/quizzes/${quizId}/attempt`),
         ]);
+
+        if (isCancelled) return;
 
         if (attemptRes.data.alreadyCompleted || attemptRes.data.autoSubmitted) {
           navigate(`/student/results/${attemptRes.data.resultId}`);
@@ -44,21 +54,36 @@ export const QuizExamPage: React.FC = () => {
         setSelectedAnswers(attData.savedAnswers || {});
         setTimeLeftSeconds(Math.max(1, attData.timeRemainingSeconds || 60));
       } catch (err: any) {
-        alert(err.response?.data?.message || err.message || 'Unable to load examination session.');
-        navigate('/student/dashboard');
+        if (isCancelled) return;
+        const msg = err.response?.data?.message || err.message || 'Unable to load examination session.';
+        setInitError(msg);
       } finally {
-        setLoading(false);
+        if (!isCancelled) {
+          setLoading(false);
+        }
       }
     }
 
     initExam();
+
+    return () => {
+      isCancelled = true;
+    };
   }, [quizId, navigate]);
 
-  // Server-authoritative timer interval
+  // Server-authoritative timer interval with strict quiz.endTime clamping
   useEffect(() => {
     if (!attempt || timeLeftSeconds <= 0) return;
 
     const interval = setInterval(() => {
+      const now = Date.now();
+      if (quiz?.endTime && now >= new Date(quiz.endTime).getTime()) {
+        clearInterval(interval);
+        setTimeLeftSeconds(0);
+        handleAutoSubmit();
+        return;
+      }
+
       setTimeLeftSeconds((prev) => {
         if (prev <= 1) {
           clearInterval(interval);
@@ -70,7 +95,7 @@ export const QuizExamPage: React.FC = () => {
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [attempt, timeLeftSeconds]);
+  }, [attempt, timeLeftSeconds, quiz]);
 
   const handleSelectOption = async (questionId: string, optionKey: string) => {
     if (submitting) return;
@@ -126,14 +151,54 @@ export const QuizExamPage: React.FC = () => {
     }
   };
 
+  if (initError) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-950 px-4 text-white font-sans">
+        <div className="max-w-md w-full bg-slate-900 border border-slate-800 rounded-3xl p-8 text-center space-y-4 shadow-2xl">
+          <div className="w-12 h-12 rounded-2xl bg-amber-500/15 border border-amber-500/30 text-amber-400 flex items-center justify-center mx-auto">
+            <AlertTriangle className="w-6 h-6" />
+          </div>
+          <h2 className="text-xl font-bold">Examination Notice</h2>
+          <p className="text-xs text-slate-300 leading-relaxed font-sinhala">{initError}</p>
+          <button
+            onClick={() => navigate('/student/dashboard')}
+            className="w-full py-3 px-4 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl text-xs transition-all"
+          >
+            Back to Dashboard
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (loading || !quiz || !attempt) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-950 text-white">
+      <div className="min-h-screen flex items-center justify-center bg-slate-950 text-white font-sans">
         <div className="flex flex-col items-center gap-4">
           <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
           <span className="font-semibold text-base text-slate-300">
             Initializing examination session...
           </span>
+        </div>
+      </div>
+    );
+  }
+
+  if (!quiz.questions || quiz.questions.length === 0) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-950 px-4 text-white font-sans">
+        <div className="max-w-md w-full bg-slate-900 border border-slate-800 rounded-3xl p-8 text-center space-y-4 shadow-2xl">
+          <div className="w-12 h-12 rounded-2xl bg-amber-500/15 border border-amber-500/30 text-amber-400 flex items-center justify-center mx-auto">
+            <AlertTriangle className="w-6 h-6" />
+          </div>
+          <h2 className="text-xl font-bold">No Questions Found</h2>
+          <p className="text-xs text-slate-400">මෙම ප්‍රශ්නාවලිය සඳහා ප්‍රශ්න ඇතුළත් කර නොමැත.</p>
+          <button
+            onClick={() => navigate('/student/dashboard')}
+            className="w-full py-3 px-4 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl text-xs transition-all"
+          >
+            Back to Dashboard
+          </button>
         </div>
       </div>
     );
@@ -152,59 +217,103 @@ export const QuizExamPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans select-none">
-      {/* Top Fixed Header with Timer */}
-      <header className="bg-slate-900/90 backdrop-blur-xl border-b border-slate-800 text-white px-6 py-4 shadow-xl sticky top-0 z-40">
-        <div className="max-w-6xl mx-auto flex justify-between items-center gap-4">
-          <div>
-            <h1 className="font-bold text-base sm:text-lg text-white font-sinhala leading-tight">
+      {/* Top Fixed Header with Timer & Closes At */}
+      <header className="bg-slate-900/90 backdrop-blur-xl border-b border-slate-800 text-white px-3 sm:px-6 py-2.5 sm:py-3.5 shadow-xl sticky top-0 z-40">
+        <div className="max-w-6xl mx-auto flex justify-between items-center gap-3">
+          <div className="min-w-0">
+            <h1 className="font-bold text-sm sm:text-lg text-white font-sinhala leading-tight truncate">
               {quiz.title}
             </h1>
-            <div className="flex items-center gap-3 text-xs text-slate-400 mt-0.5">
+            <div className="flex flex-wrap items-center gap-x-2 sm:gap-x-3 gap-y-1 text-[11px] sm:text-xs text-slate-400 mt-0.5">
               <span>
-                Question {currentQuestionIdx + 1} of {totalQuestions}
+                Q {currentQuestionIdx + 1} / {totalQuestions}
               </span>
               <span>•</span>
-              <span>
-                {answeredCount} of {totalQuestions} Answered
+              <span className="text-emerald-400 font-medium">
+                {answeredCount} / {totalQuestions} Answered
               </span>
+              {quiz.startTime && quiz.endTime && (
+                <>
+                  <span className="hidden sm:inline">•</span>
+                  <span className="inline-flex items-center gap-1 text-blue-300 font-mono text-[10px] sm:text-xs bg-blue-950/60 border border-blue-800/60 px-2 py-0.5 rounded-md">
+                    <Clock className="w-3 h-3 text-blue-400" />
+                    {formatSriLankanTimePeriod(quiz.startTime, quiz.endTime)}
+                  </span>
+                </>
+              )}
             </div>
           </div>
 
-          {/* Countdown Timer Capsule */}
-          <div
-            className={`flex items-center gap-2 px-4 py-2 rounded-2xl font-mono text-lg sm:text-xl font-extrabold border transition-all ${
-              isLowTime
-                ? 'bg-rose-950/80 border-rose-500/60 text-rose-300 animate-pulse shadow-lg shadow-rose-900/30'
-                : 'bg-slate-950/80 border-slate-800 text-emerald-400 shadow-inner'
-            }`}
-          >
-            <Clock className="w-5 h-5 text-current" />
-            <span>{formatTime(timeLeftSeconds)}</span>
+          {/* Countdown Timer & Closes At Capsule */}
+          <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
+            {quiz.endTime && (
+              <div className="hidden md:flex flex-col text-right">
+                <span className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">
+                  නියමිත අවසන් වේලාව
+                </span>
+                <span className="text-xs font-mono font-bold text-rose-300">
+                  {formatSriLankanClockTime(quiz.endTime)}
+                </span>
+              </div>
+            )}
+            <div
+              className={`flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-xl sm:rounded-2xl font-mono text-sm sm:text-xl font-extrabold border transition-all ${
+                isLowTime
+                  ? 'bg-rose-950/80 border-rose-500/60 text-rose-300 animate-pulse shadow-lg shadow-rose-900/30'
+                  : 'bg-slate-950/80 border-slate-800 text-emerald-400 shadow-inner'
+              }`}
+            >
+              <Clock className="w-4 h-4 sm:w-5 sm:h-5 text-current" />
+              <span>{formatTime(timeLeftSeconds)}</span>
+            </div>
           </div>
         </div>
       </header>
 
       {/* Main Examination Work Area */}
-      <main className="flex-1 max-w-6xl w-full mx-auto p-4 sm:p-6 lg:p-8 grid grid-cols-1 lg:grid-cols-4 gap-8">
+      <main className="flex-1 max-w-6xl w-full mx-auto p-3 sm:p-6 lg:p-8 grid grid-cols-1 lg:grid-cols-4 gap-4 sm:gap-8">
         {/* Question Panel */}
-        <div className="lg:col-span-3 bg-slate-900/70 backdrop-blur-xl rounded-3xl p-6 sm:p-8 border border-slate-800 shadow-2xl flex flex-col justify-between">
-          <div className="space-y-6">
-            <div className="flex justify-between items-center text-xs pb-4 border-b border-slate-800/80">
-              <span className="font-extrabold bg-blue-500/15 text-blue-400 border border-blue-500/30 px-3 py-1 rounded-xl uppercase tracking-wider">
+        <div className="lg:col-span-3 bg-slate-900/70 backdrop-blur-xl rounded-2xl sm:rounded-3xl p-4 sm:p-8 border border-slate-800 shadow-2xl flex flex-col justify-between">
+          <div className="space-y-4 sm:space-y-6">
+            {/* Mobile Horizontal Question Strip */}
+            <div className="lg:hidden flex items-center gap-1.5 overflow-x-auto pb-2 border-b border-slate-800/60 scrollbar-none">
+              {quiz.questions.map((q, idx) => {
+                const isAnswered = Boolean(selectedAnswers[q._id]);
+                const isCurrent = idx === currentQuestionIdx;
+                return (
+                  <button
+                    key={q._id}
+                    onClick={() => setCurrentQuestionIdx(idx)}
+                    className={`w-7 h-7 sm:w-8 sm:h-8 rounded-lg font-bold text-xs flex-shrink-0 transition-all flex items-center justify-center ${
+                      isCurrent
+                        ? 'ring-2 ring-blue-500 bg-blue-600 text-white shadow-md shadow-blue-500/30'
+                        : isAnswered
+                        ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                        : 'bg-slate-950 text-slate-400 border border-slate-800'
+                    }`}
+                  >
+                    {idx + 1}
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="flex justify-between items-center text-xs pb-3 sm:pb-4 border-b border-slate-800/80">
+              <span className="font-extrabold bg-blue-500/15 text-blue-400 border border-blue-500/30 px-2.5 sm:px-3 py-1 rounded-xl uppercase tracking-wider text-[11px] sm:text-xs">
                 Question {currentQuestionIdx + 1}
               </span>
-              <span className="text-slate-400 font-semibold bg-slate-950/60 px-2.5 py-1 rounded-lg border border-slate-800">
+              <span className="text-slate-400 font-semibold bg-slate-950/60 px-2.5 py-1 rounded-lg border border-slate-800 text-[11px] sm:text-xs">
                 Marks: {currentQuestion.marks || 1}
               </span>
             </div>
 
             {/* Question Text (Supports Sinhala Unicode & LaTeX) */}
-            <div className="text-lg sm:text-xl font-medium text-slate-100 leading-relaxed font-sinhala">
+            <div className="text-base sm:text-xl font-medium text-slate-100 leading-relaxed font-sinhala">
               <MathRenderer text={currentQuestion.questionText} />
             </div>
 
             {/* Answer Options Grid */}
-            <div className="space-y-3 pt-2">
+            <div className="space-y-2.5 sm:space-y-3 pt-1 sm:pt-2">
               {currentQuestion.options.map((opt) => {
                 const isSelected = selectedAnswers[currentQuestion._id] === opt.key;
                 return (
@@ -212,14 +321,14 @@ export const QuizExamPage: React.FC = () => {
                     key={opt.key}
                     type="button"
                     onClick={() => handleSelectOption(currentQuestion._id, opt.key)}
-                    className={`w-full text-left p-4 rounded-2xl border-2 transition-all flex items-start gap-4 ${
+                    className={`w-full text-left p-3.5 sm:p-4 rounded-xl sm:rounded-2xl border-2 transition-all flex items-start gap-3 sm:gap-4 active:scale-[0.99] ${
                       isSelected
                         ? 'bg-blue-600/15 border-blue-500 text-white shadow-lg shadow-blue-500/10'
                         : 'bg-slate-950/50 border-slate-800/80 text-slate-300 hover:border-slate-700 hover:bg-slate-950'
                     }`}
                   >
                     <div
-                      className={`w-8 h-8 rounded-xl flex items-center justify-center font-bold text-sm flex-shrink-0 transition-all ${
+                      className={`w-7 h-7 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl flex items-center justify-center font-bold text-xs sm:text-sm flex-shrink-0 transition-all ${
                         isSelected
                           ? 'bg-blue-600 text-white shadow-md shadow-blue-500/30'
                           : 'bg-slate-800 border border-slate-700 text-slate-400'
@@ -227,7 +336,7 @@ export const QuizExamPage: React.FC = () => {
                     >
                       {opt.key}
                     </div>
-                    <div className="text-base text-slate-200 pt-0.5 leading-relaxed font-sinhala">
+                    <div className="text-sm sm:text-base text-slate-200 pt-0.5 leading-relaxed font-sinhala">
                       <MathRenderer text={opt.text} />
                     </div>
                   </button>
@@ -237,11 +346,11 @@ export const QuizExamPage: React.FC = () => {
           </div>
 
           {/* Navigation Controls */}
-          <div className="pt-8 mt-8 border-t border-slate-800/80 flex justify-between items-center">
+          <div className="pt-6 sm:pt-8 mt-6 sm:mt-8 border-t border-slate-800/80 flex justify-between items-center gap-2">
             <button
               onClick={() => setCurrentQuestionIdx((p) => Math.max(0, p - 1))}
               disabled={currentQuestionIdx === 0}
-              className="px-4 py-2.5 rounded-xl border border-slate-800 text-slate-300 font-semibold text-xs hover:bg-slate-800 disabled:opacity-40 flex items-center gap-1.5 transition-colors"
+              className="px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl border border-slate-800 text-slate-300 font-semibold text-xs hover:bg-slate-800 disabled:opacity-40 flex items-center gap-1 transition-colors"
             >
               <ChevronLeft className="w-4 h-4" /> Previous
             </button>
@@ -249,7 +358,7 @@ export const QuizExamPage: React.FC = () => {
             {currentQuestionIdx < totalQuestions - 1 ? (
               <button
                 onClick={() => setCurrentQuestionIdx((p) => p + 1)}
-                className="px-6 py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl text-xs shadow-lg shadow-blue-500/25 flex items-center gap-1.5 transition-all hover:scale-105 active:scale-95"
+                className="px-5 sm:px-6 py-2 sm:py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl text-xs shadow-lg shadow-blue-500/25 flex items-center gap-1.5 transition-all hover:scale-105 active:scale-95"
               >
                 Next <ChevronRight className="w-4 h-4" />
               </button>
@@ -257,7 +366,7 @@ export const QuizExamPage: React.FC = () => {
               <button
                 onClick={() => setShowSubmitModal(true)}
                 disabled={submitting}
-                className="px-6 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold rounded-xl text-xs shadow-lg shadow-emerald-500/25 flex items-center gap-2 transition-all hover:scale-105 active:scale-95"
+                className="px-5 sm:px-6 py-2 sm:py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold rounded-xl text-xs shadow-lg shadow-emerald-500/25 flex items-center gap-1.5 transition-all hover:scale-105 active:scale-95"
               >
                 <Send className="w-4 h-4" /> Submit Exam
               </button>
@@ -271,6 +380,22 @@ export const QuizExamPage: React.FC = () => {
             <h3 className="font-bold text-white text-sm">Question Palette</h3>
             <p className="text-[11px] text-slate-400 mt-0.5">Jump directly to any question</p>
           </div>
+
+          {/* Time Window Strict Notice */}
+          {quiz.startTime && quiz.endTime && (
+            <div className="p-3 bg-blue-950/40 border border-blue-800/50 rounded-2xl text-[11px] space-y-1.5">
+              <div className="flex items-center gap-1.5 text-blue-300 font-bold">
+                <Clock className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" />
+                <span>විභාග කාල සීමාව (Time Window)</span>
+              </div>
+              <p className="font-mono text-white text-[11px] font-semibold">
+                {formatSriLankanTimePeriod(quiz.startTime, quiz.endTime)}
+              </p>
+              <p className="text-[10px] text-amber-300/90 leading-tight">
+                ⚠️ සෑම සිසුවෙකුම අවසන් වේලාවට ({formatSriLankanClockTime(quiz.endTime)}) පෙර පිළිතුරු භාර දිය යුතුය.
+              </p>
+            </div>
+          )}
 
           <div className="grid grid-cols-5 gap-2">
             {quiz.questions.map((q, idx) => {

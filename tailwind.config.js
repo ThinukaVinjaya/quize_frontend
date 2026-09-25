@@ -6,7 +6,9 @@ export default {
       fontFamily: {
         sans: ['Inter', 'system-ui', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],
         display: ['Outfit', 'Inter', 'sans-serif'],
-        sinhala: ['"Noto Sans Sinhala"', 'sans-serif'],
+        sinhala: ['"Noto Sans Sinhala"', 'Arial', 'sans-serif'],
+        'sinhala-bold': ['"Noto Sans Sinhala"', 'Arial', 'sans-serif'],
+        'sinhala-arial': ['Arial', '"Noto Sans Sinhala"', 'sans-serif'],
       },
       colors: {
         brand: {

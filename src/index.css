@@ -42,8 +42,22 @@
 }
 
 .font-sinhala-content {
-  font-family: 'Noto Sans Sinhala', 'Inter', sans-serif;
+  font-family: 'Noto Sans Sinhala', Arial, 'Inter', sans-serif;
   line-height: 1.75;
+}
+
+.font-sinhala-regular {
+  font-family: 'Noto Sans Sinhala', Arial, sans-serif;
+  font-weight: 400;
+}
+
+.font-sinhala-bold {
+  font-family: 'Noto Sans Sinhala', Arial, sans-serif;
+  font-weight: 700;
+}
+
+.font-sinhala-arial {
+  font-family: Arial, 'Noto Sans Sinhala', sans-serif;
 }
 
 /* Custom modern scrollbars */
