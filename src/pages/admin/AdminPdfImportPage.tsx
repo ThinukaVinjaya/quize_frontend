@@ -23,7 +23,7 @@ import {
   Type,
   Calendar
 } from 'lucide-react';
-import { toSriLankanInputString, fromSriLankanInputString } from '../../utils/sriLankanTime.js';
+import { toSriLankanInputString, fromSriLankanInputString, formatSriLankanTimePeriod } from '../../utils/sriLankanTime.js';
 
 export const AdminPdfImportPage: React.FC = () => {
   const navigate = useNavigate();
@@ -40,12 +40,10 @@ export const AdminPdfImportPage: React.FC = () => {
   const [copied, setCopied] = useState(false);
   const [publishMode, setPublishMode] = useState<'LIVE' | 'SCHEDULED'>('LIVE');
   const [scheduledStartTime, setScheduledStartTime] = useState<string>(() => {
-    const d = new Date(Date.now() + 30 * 60 * 1000);
-    return toSriLankanInputString(d);
+    return toSriLankanInputString(new Date());
   });
   const [scheduledEndTime, setScheduledEndTime] = useState<string>(() => {
-    const d = new Date(Date.now() + 90 * 60 * 1000);
-    return toSriLankanInputString(d);
+    return toSriLankanInputString(new Date(Date.now() + 30 * 60 * 1000));
   });
 
   const getFontClass = () => {
@@ -84,6 +82,9 @@ export const AdminPdfImportPage: React.FC = () => {
       setEditingQuestions(questionsList);
       const calculatedDuration = questionsList.length > 0 ? Math.max(15, Math.ceil(questionsList.length * 1.5)) : 30;
       setDurationMinutes(calculatedDuration);
+      const now = new Date();
+      setScheduledStartTime(toSriLankanInputString(now));
+      setScheduledEndTime(toSriLankanInputString(new Date(now.getTime() + calculatedDuration * 60000)));
       setQuizTitle(
         `${data.subjectName || 'Science'} - ${data.topicName || 'Model Examination'}`
       );
@@ -110,6 +111,9 @@ export const AdminPdfImportPage: React.FC = () => {
       setEditingQuestions(questionsList);
       const calculatedDuration = questionsList.length > 0 ? Math.max(15, Math.ceil(questionsList.length * 1.5)) : 30;
       setDurationMinutes(calculatedDuration);
+      const now = new Date();
+      setScheduledStartTime(toSriLankanInputString(now));
+      setScheduledEndTime(toSriLankanInputString(new Date(now.getTime() + calculatedDuration * 60000)));
       setQuizTitle(
         `${data.subjectName || 'විද්‍යාව'} - ${data.topicName || 'ආදර්ශ පරීක්ෂණය'}`
       );
@@ -162,14 +166,14 @@ export const AdminPdfImportPage: React.FC = () => {
         title: quizTitle,
         durationMinutes: finalDuration,
         publishMode,
-        scheduledStartTime: publishMode === 'SCHEDULED' ? fromSriLankanInputString(scheduledStartTime).toISOString() : undefined,
-        scheduledEndTime: publishMode === 'SCHEDULED' && scheduledEndTime ? fromSriLankanInputString(scheduledEndTime).toISOString() : undefined,
+        scheduledStartTime: fromSriLankanInputString(scheduledStartTime).toISOString(),
+        scheduledEndTime: fromSriLankanInputString(scheduledEndTime).toISOString(),
       });
 
       if (publishMode === 'SCHEDULED') {
-        alert(`ප්‍රශ්නාවලිය සාර්ථකව ශ්‍රී ලංකා වේලාවෙන් උපලේඛනගත කරන ලදී! (Quiz scheduled successfully for ${scheduledStartTime.replace('T', ' ')} SLST)`);
+        alert('Quiz created and scheduled successfully in Sri Lankan Time!');
       } else {
-        alert(`ප්‍රශ්නාවලිය සාර්ථකව විනාඩි ${finalDuration} ක කාල සීමාවක් සහිතව සජීවීව පළ කරන ලදී! (Quiz published successfully as LIVE with ${finalDuration} min duration)`);
+        alert('Quiz created and published live successfully!');
       }
       navigate('/admin/quizzes');
     } catch (err: any) {
@@ -334,6 +338,9 @@ CORRECT: B`
               >
                 <Upload className="w-4 h-4 text-blue-300" />
                 <span>Upload PDF Document (PDF ගොනුව)</span>
+                <span className="px-2 py-0.5 bg-blue-400/20 text-blue-300 text-[10px] rounded-full border border-blue-400/30 flex items-center gap-1 font-bold">
+                  <Sparkles className="w-3 h-3 text-amber-300" /> Gemini AI
+                </span>
               </button>
             </div>
 
@@ -410,9 +417,13 @@ CORRECT: B`
                 </div>
 
                 <div className="max-w-md mx-auto space-y-2">
+                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/25 text-blue-300 text-xs font-semibold">
+                    <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                    Powered by Google Gemini Multimodal AI
+                  </div>
                   <h2 className="text-lg font-bold text-white">Choose Examination PDF Document</h2>
                   <p className="text-xs text-slate-400 leading-relaxed">
-                    Upload a standard text-based PDF test paper. Multiple curriculum topics per quiz (TOPIC: ...) are automatically separated and analyzed.
+                    Upload any examination PDF paper. Google Gemini AI reads Sinhala fonts (both modern Unicode & FM-Abhaya), cleans complex ligatures (kombuwa, bandi akuru), and extracts questions with 100% accuracy.
                   </p>
                 </div>
 
@@ -428,15 +439,18 @@ CORRECT: B`
                   <button
                     type="submit"
                     disabled={loading || !file}
-                    className="w-full py-3.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold rounded-2xl shadow-lg shadow-blue-500/25 transition-all flex items-center justify-center gap-2 text-xs uppercase tracking-wider disabled:opacity-50"
+                    className="w-full py-3.5 bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold rounded-2xl shadow-lg shadow-blue-500/25 transition-all flex items-center justify-center gap-2 text-xs uppercase tracking-wider disabled:opacity-50"
                   >
                     {loading ? (
                       <span className="flex items-center gap-2">
                         <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                        Parsing PDF Questions...
+                        Gemini AI Extracting Sinhala Questions...
                       </span>
                     ) : (
-                      'Upload & Extract Questions'
+                      <span className="flex items-center gap-2">
+                        <Sparkles className="w-4 h-4 text-amber-300" />
+                        Upload & Extract via Gemini AI
+                      </span>
                     )}
                   </button>
                 </form>
@@ -568,9 +582,14 @@ CORRECT: B`
           <div className="bg-slate-900/70 backdrop-blur-xl rounded-3xl p-6 sm:p-8 border border-slate-800 shadow-xl space-y-5">
             <div className="flex justify-between items-center border-b border-slate-800 pb-4">
               <div>
-                <span className="text-xs font-bold text-emerald-400 uppercase tracking-wider bg-emerald-500/10 px-2.5 py-1 rounded-md border border-emerald-500/20">
-                  Parsing Completed
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-emerald-400 uppercase tracking-wider bg-emerald-500/10 px-2.5 py-1 rounded-md border border-emerald-500/20">
+                    Parsing Completed
+                  </span>
+                  <span className="text-xs font-bold text-blue-300 uppercase tracking-wider bg-blue-500/10 px-2.5 py-1 rounded-md border border-blue-500/20 flex items-center gap-1">
+                    <Sparkles className="w-3 h-3 text-amber-300" /> Gemini AI Powered
+                  </span>
+                </div>
                 <h2 className="text-xl font-bold text-white font-display mt-2">
                   Verify Extracted Questions ({editingQuestions.length})
                 </h2>
@@ -613,18 +632,29 @@ CORRECT: B`
                   <input
                     type="number"
                     min="1"
-                    max="360"
+                    max="1440"
                     required
                     value={durationMinutes}
-                    onChange={(e) => setDurationMinutes(Math.max(1, Number(e.target.value)))}
+                    onChange={(e) => {
+                      const val = Math.max(1, Number(e.target.value));
+                      setDurationMinutes(val);
+                      const start = fromSriLankanInputString(scheduledStartTime);
+                      const end = new Date(start.getTime() + val * 60000);
+                      setScheduledEndTime(toSriLankanInputString(end));
+                    }}
                     className="w-20 px-3 py-2 bg-slate-950/60 border border-slate-800 rounded-xl text-slate-100 text-sm font-bold text-center focus:ring-2 focus:ring-blue-500"
                   />
                   <div className="flex items-center gap-1 flex-wrap">
-                    {[15, 30, 45, 60].map((mins) => (
+                    {[15, 30, 45, 60, 90, 120].map((mins) => (
                       <button
                         key={mins}
                         type="button"
-                        onClick={() => setDurationMinutes(mins)}
+                        onClick={() => {
+                          setDurationMinutes(mins);
+                          const start = fromSriLankanInputString(scheduledStartTime);
+                          const end = new Date(start.getTime() + mins * 60000);
+                          setScheduledEndTime(toSriLankanInputString(end));
+                        }}
                         className={`px-2 py-1.5 rounded-lg text-xs font-bold transition-all ${
                           durationMinutes === mins
                             ? 'bg-blue-600 text-white shadow-md'
@@ -826,7 +856,7 @@ CORRECT: B`
             ))}
           </div>
 
-          {/* Pre-Publish Quiz Timing Adjustment & Summary Card */}
+          {/* Pre-Publish Quiz Timing Adjustment & Time Period Summary Card */}
           <div className="bg-gradient-to-br from-slate-900 via-slate-900 to-blue-950/40 rounded-3xl p-6 sm:p-8 border border-blue-500/20 shadow-2xl space-y-6">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 pb-4">
               <div className="flex items-center gap-3">
@@ -835,10 +865,10 @@ CORRECT: B`
                 </div>
                 <div>
                   <h3 className="text-base sm:text-lg font-bold text-white font-display">
-                    Adjust Quiz Duration Before Publishing (විභාග කාලය සකස් කිරීම)
+                    Publishing Mode & Time Period (ප්‍රකාශන ආකාරය සහ කාල සීමාව) *
                   </h3>
                   <p className="text-xs text-slate-400">
-                    Set the authoritative time limit students will have to complete this examination.
+                    Set the exact examination time period (e.g. 11:00 PM - 12:00 AM). Every student must answer within this window.
                   </p>
                 </div>
               </div>
@@ -852,39 +882,186 @@ CORRECT: B`
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
-              <div>
-                <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-2">
-                  Examination Time Limit (Minutes / මිනිත්තු) *
-                </label>
-                <div className="flex items-center gap-3">
+            {/* Publishing Mode Buttons */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setPublishMode('LIVE');
+                  const now = new Date();
+                  setScheduledStartTime(toSriLankanInputString(now));
+                  setScheduledEndTime(toSriLankanInputString(new Date(now.getTime() + durationMinutes * 60000)));
+                }}
+                className={`p-4 rounded-2xl border text-left transition-all flex items-start gap-3.5 ${
+                  publishMode === 'LIVE'
+                    ? 'bg-emerald-950/30 border-emerald-500/50 shadow-lg shadow-emerald-500/10 ring-1 ring-emerald-500'
+                    : 'bg-slate-950/60 border-slate-800 hover:border-slate-700'
+                }`}
+              >
+                <div className={`p-2.5 rounded-xl ${publishMode === 'LIVE' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-800 text-slate-400'}`}>
+                  <CheckCircle className="w-5 h-5" />
+                </div>
+                <div>
+                  <span className="block text-sm font-bold text-white">Publish Live Immediately</span>
+                  <span className="block text-xs text-emerald-400 font-sinhala mt-0.5">දැන්ම සජීවීව පල කරන්න</span>
+                  <p className="text-[11px] text-slate-400 mt-1">Quiz activates immediately for the set duration window.</p>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setPublishMode('SCHEDULED');
+                  const futureStart = new Date(Date.now() + 30 * 60000);
+                  setScheduledStartTime(toSriLankanInputString(futureStart));
+                  setScheduledEndTime(toSriLankanInputString(new Date(futureStart.getTime() + durationMinutes * 60000)));
+                }}
+                className={`p-4 rounded-2xl border text-left transition-all flex items-start gap-3.5 ${
+                  publishMode === 'SCHEDULED'
+                    ? 'bg-blue-950/30 border-blue-500/50 shadow-lg shadow-blue-500/10 ring-1 ring-blue-500'
+                    : 'bg-slate-950/60 border-slate-800 hover:border-slate-700'
+                }`}
+              >
+                <div className={`p-2.5 rounded-xl ${publishMode === 'SCHEDULED' ? 'bg-blue-500/20 text-blue-400' : 'bg-slate-800 text-slate-400'}`}>
+                  <Calendar className="w-5 h-5" />
+                </div>
+                <div>
+                  <span className="block text-sm font-bold text-white">Schedule Quiz Period (SLST)</span>
+                  <span className="block text-xs text-blue-400 font-sinhala mt-0.5">නියමිත වේලාවකට උපලේඛනගත කරන්න</span>
+                  <p className="text-[11px] text-slate-400 mt-1">Unlocks at scheduled start time and closes at end time.</p>
+                </div>
+              </button>
+            </div>
+
+            {/* Time Window Settings Card */}
+            <div className="p-4 sm:p-5 bg-slate-950/80 rounded-2xl border border-blue-500/30 space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800/80 pb-3">
+                <div className="flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-blue-400" />
+                  <span className="text-xs font-bold text-white">
+                    Sri Lanka Standard Time (SLST / Asia/Colombo · UTC+05:30)
+                  </span>
+                </div>
+                <span className="text-[10px] font-extrabold uppercase tracking-wider text-blue-300 bg-blue-500/10 border border-blue-500/30 px-2.5 py-0.5 rounded-lg self-start sm:self-auto">
+                  {publishMode === 'LIVE' ? 'Live Window Active' : 'Scheduled Window'}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1.5">
+                    Start Date & Time (ආරම්භක වේලාව) *
+                  </label>
                   <input
-                    type="number"
-                    min="1"
-                    max="360"
-                    value={durationMinutes}
-                    onChange={(e) => setDurationMinutes(Math.max(1, Number(e.target.value)))}
-                    className="w-28 px-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-white font-black text-lg text-center focus:ring-2 focus:ring-blue-500"
+                    type="datetime-local"
+                    required
+                    value={scheduledStartTime}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setScheduledStartTime(val);
+                      const start = fromSriLankanInputString(val);
+                      const end = new Date(start.getTime() + durationMinutes * 60000);
+                      setScheduledEndTime(toSriLankanInputString(end));
+                    }}
+                    className="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-white text-xs font-medium focus:ring-2 focus:ring-blue-500"
                   />
-                  <div className="flex flex-wrap gap-1.5">
-                    {[15, 20, 30, 45, 60, 90, 120].map((mins) => (
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1.5">
+                    End Date & Time (අවසන් වන වේලාව) *
+                  </label>
+                  <input
+                    type="datetime-local"
+                    required
+                    value={scheduledEndTime}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setScheduledEndTime(val);
+                      const start = fromSriLankanInputString(scheduledStartTime);
+                      const end = fromSriLankanInputString(val);
+                      const diffMins = Math.max(1, Math.round((end.getTime() - start.getTime()) / 60000));
+                      setDurationMinutes(diffMins);
+                    }}
+                    className="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-white text-xs font-medium focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1.5">
+                    Duration (කාලය මිනිත්තු වලින්) *
+                  </label>
+                  <div className="flex gap-1.5 items-center">
+                    <input
+                      type="number"
+                      min="1"
+                      max="1440"
+                      required
+                      value={durationMinutes}
+                      onChange={(e) => {
+                        const val = Math.max(1, Number(e.target.value));
+                        setDurationMinutes(val);
+                        const start = fromSriLankanInputString(scheduledStartTime);
+                        const end = new Date(start.getTime() + val * 60000);
+                        setScheduledEndTime(toSriLankanInputString(end));
+                      }}
+                      className="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-white text-xs font-medium focus:ring-2 focus:ring-blue-500"
+                    />
+                    <span className="text-xs text-slate-400 font-semibold">mins</span>
+                  </div>
+
+                  {/* Quick Preset Buttons */}
+                  <div className="flex items-center gap-1 mt-1.5">
+                    {[15, 30, 45, 60, 90, 120].map((m) => (
                       <button
-                        key={mins}
+                        key={m}
                         type="button"
-                        onClick={() => setDurationMinutes(mins)}
-                        className={`px-3 py-2 rounded-xl text-xs font-bold transition-all ${
-                          durationMinutes === mins
-                            ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/25 ring-2 ring-blue-400'
-                            : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
+                        onClick={() => {
+                          setDurationMinutes(m);
+                          const start = fromSriLankanInputString(scheduledStartTime);
+                          const end = new Date(start.getTime() + m * 60000);
+                          setScheduledEndTime(toSriLankanInputString(end));
+                        }}
+                        className={`text-[10px] font-bold px-1.5 py-0.5 rounded border transition-colors ${
+                          durationMinutes === m
+                            ? 'bg-blue-600 text-white border-blue-500'
+                            : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-white'
                         }`}
                       >
-                        {mins}m
+                        {m}m
                       </button>
                     ))}
                   </div>
                 </div>
               </div>
 
+              {/* Time Period Live Preview Card */}
+              <div className="p-3.5 bg-blue-500/10 border border-blue-500/30 rounded-xl space-y-1.5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
+                  <div className="flex items-center gap-2">
+                    <Clock className="w-4 h-4 text-blue-400 flex-shrink-0" />
+                    <div>
+                      <span className="text-[11px] font-bold text-blue-300 block">
+                        විභාග කාල සීමාව (Official Examination Period):
+                      </span>
+                      <strong className="text-xs sm:text-sm text-white font-mono block">
+                        {formatSriLankanTimePeriod(
+                          fromSriLankanInputString(scheduledStartTime),
+                          fromSriLankanInputString(scheduledEndTime)
+                        )}
+                      </strong>
+                    </div>
+                  </div>
+                  <span className="px-2.5 py-1 rounded-lg bg-blue-600/30 border border-blue-500/40 text-blue-200 text-xs font-bold font-mono self-start sm:self-auto">
+                    {durationMinutes} Minutes Window
+                  </span>
+                </div>
+                <p className="text-[10px] text-slate-400">
+                  සියලුම සිසුන් මෙම කාල සීමාව තුළදී පමණක් ප්‍රශ්නාවලියට පිළිතුරු සැපයිය යුතුය. නියමිත අවසන් වේලාවට පෙර ප්‍රශ්නාවලිය ස්වයංක්‍රීයව භාර ගැනේ.
+                </p>
+              </div>
+
+              {/* Supplementary details */}
               <div className="p-4 bg-slate-950/60 rounded-2xl border border-slate-800/80 space-y-2 text-xs">
                 <div className="flex justify-between items-center text-slate-300">
                   <span>⏱️ Allocated Quiz Time:</span>
@@ -911,95 +1088,9 @@ CORRECT: B`
               </div>
             </div>
 
-            {/* Sri Lankan Time Quiz Scheduling & Timing Adjustment */}
-            <div className="space-y-4 pt-2 border-t border-slate-800/80">
-              <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider">
-                Publishing Mode & Schedule (ප්‍රකාශන ආකාරය සහ ශ්‍රී ලංකා වේලාව) *
-              </label>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <button
-                  type="button"
-                  onClick={() => setPublishMode('LIVE')}
-                  className={`p-4 rounded-2xl border text-left transition-all flex items-start gap-3.5 ${
-                    publishMode === 'LIVE'
-                      ? 'bg-emerald-950/30 border-emerald-500/50 shadow-lg shadow-emerald-500/10 ring-1 ring-emerald-500'
-                      : 'bg-slate-950/60 border-slate-800 hover:border-slate-700'
-                  }`}
-                >
-                  <div className={`p-2.5 rounded-xl ${publishMode === 'LIVE' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-800 text-slate-400'}`}>
-                    <CheckCircle className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <span className="block text-sm font-bold text-white">Publish Live Immediately</span>
-                    <span className="block text-xs text-emerald-400 font-sinhala mt-0.5">දැන්ම සජීවීව පල කරන්න</span>
-                    <p className="text-[11px] text-slate-400 mt-1">Quiz becomes active right away for students to attempt.</p>
-                  </div>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setPublishMode('SCHEDULED')}
-                  className={`p-4 rounded-2xl border text-left transition-all flex items-start gap-3.5 ${
-                    publishMode === 'SCHEDULED'
-                      ? 'bg-blue-950/30 border-blue-500/50 shadow-lg shadow-blue-500/10 ring-1 ring-blue-500'
-                      : 'bg-slate-950/60 border-slate-800 hover:border-slate-700'
-                  }`}
-                >
-                  <div className={`p-2.5 rounded-xl ${publishMode === 'SCHEDULED' ? 'bg-blue-500/20 text-blue-400' : 'bg-slate-800 text-slate-400'}`}>
-                    <Calendar className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <span className="block text-sm font-bold text-white">Schedule Quiz (SLST)</span>
-                    <span className="block text-xs text-blue-400 font-sinhala mt-0.5">ශ්‍රී ලංකා වේලාවෙන් උපලේඛනගත කරන්න</span>
-                    <p className="text-[11px] text-slate-400 mt-1">Students see upcoming date/time; unlocks at scheduled time.</p>
-                  </div>
-                </button>
-              </div>
-
-              {publishMode === 'SCHEDULED' && (
-                <div className="p-4 bg-slate-950/80 rounded-2xl border border-blue-500/30 space-y-4 animate-in fade-in duration-300">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Clock className="w-4 h-4 text-blue-400" />
-                      <span className="text-xs font-bold text-white">
-                        Sri Lanka Standard Time (SLST / Asia/Colombo · UTC+05:30)
-                      </span>
-                    </div>
-                    <span className="text-[10px] font-extrabold uppercase tracking-wider text-blue-300 bg-blue-500/10 border border-blue-500/30 px-2.5 py-0.5 rounded-lg">
-                      Sri Lanka Timezone Active
-                    </span>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                        Scheduled Start Date & Time (ආරම්භක දිනය සහ වේලාව) *
-                      </label>
-                      <input
-                        type="datetime-local"
-                        value={scheduledStartTime}
-                        onChange={(e) => setScheduledStartTime(e.target.value)}
-                        className="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-white text-xs font-medium focus:ring-2 focus:ring-blue-500"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                        Scheduled End Date & Time (අවසන් වන දිනය සහ වේලාව - Optional)
-                      </label>
-                      <input
-                        type="datetime-local"
-                        value={scheduledEndTime}
-                        onChange={(e) => setScheduledEndTime(e.target.value)}
-                        className="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-white text-xs font-medium focus:ring-2 focus:ring-blue-500"
-                      />
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-
             <div className="pt-2">
               <button
+                type="button"
                 onClick={handlePublishAsQuiz}
                 className={`w-full py-4 text-white font-extrabold rounded-2xl shadow-xl transition-all flex items-center justify-center gap-2 text-sm uppercase tracking-wider ${
                   publishMode === 'SCHEDULED'
